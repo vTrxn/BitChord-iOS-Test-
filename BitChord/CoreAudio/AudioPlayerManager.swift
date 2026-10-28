@@ -264,7 +264,7 @@ final class AudioPlayerManager: ObservableObject {
     /// Advances to the next track in queue or loops based on repeatMode.
     func next() {
         guard !queue.isEmpty else { return }
-        if repeatMode == .one, let song = currentSong {
+        if repeatMode == .one, currentSong != nil {
             seek(to: 0)
             resume()
             return

@@ -64,7 +64,6 @@ struct LyricsSheetView: View {
                     Button("Done") {
                         dismiss()
                     }
-                    .font(.body.weight(.semibold))
                 }
             }
         }
