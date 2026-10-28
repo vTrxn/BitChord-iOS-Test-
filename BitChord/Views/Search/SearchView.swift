@@ -93,7 +93,7 @@ struct SearchView: View {
                         }
                     }
                 }
-                .padding(.bottom, player.currentSong != nil ? 64 : 0)
+                .padding(.bottom, player.currentSong != nil ? 130 : 64)
             }
             .navigationTitle("Search")
             .searchable(text: $searchText, prompt: "Search tracks, artists, albums...")

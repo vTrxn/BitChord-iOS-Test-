@@ -19,6 +19,13 @@ final class NowPlayingManager {
     ) {
         let commandCenter = MPRemoteCommandCenter.shared()
         
+        commandCenter.playCommand.removeTarget(nil)
+        commandCenter.pauseCommand.removeTarget(nil)
+        commandCenter.togglePlayPauseCommand.removeTarget(nil)
+        commandCenter.nextTrackCommand.removeTarget(nil)
+        commandCenter.previousTrackCommand.removeTarget(nil)
+        commandCenter.changePlaybackPositionCommand.removeTarget(nil)
+        
         commandCenter.playCommand.isEnabled = true
         commandCenter.playCommand.addTarget { _ in
             onPlay()
@@ -76,6 +83,9 @@ final class NowPlayingManager {
         info[MPMediaItemPropertyPlaybackDuration] = duration > 0 ? duration : Double(song.durationSeconds)
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+        info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue
+        info[MPNowPlayingInfoPropertyIsLiveStream] = false
         
         if let image = artworkImage {
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }

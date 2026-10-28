@@ -9,12 +9,13 @@ final class AudioStreamService {
     
     /// Resolves direct audio stream URL for a given video ID and target quality.
     /// Iterates through configured server instances until an operational stream is returned.
+    /// Appends `local=true` to force node-side stream proxying, preventing Google IP 403 blocks.
     func resolveStreamURL(videoId: String, quality: StreamQuality = .high) async throws -> URL {
         let primaryInstance = await MainActor.run { InstanceManager.shared.activeInstance }
         let instances = [primaryInstance] + AppConstants.defaultInstances.filter { $0 != primaryInstance }
         
         for instance in instances {
-            guard let url = URL(string: "\(instance)/api/v1/videos/\(videoId)") else { continue }
+            guard let url = URL(string: "\(instance)/api/v1/videos/\(videoId)?local=true") else { continue }
             
             var request = URLRequest(url: url)
             request.timeoutInterval = 7
@@ -26,7 +27,7 @@ final class AudioStreamService {
                     continue
                 }
                 
-                if let streamURL = extractAudioURL(from: data, targetBitrate: quality.targetBitrate) {
+                if let streamURL = extractAudioURL(from: data, targetBitrate: quality.targetBitrate, instance: instance) {
                     return streamURL
                 }
             } catch {
@@ -38,7 +39,8 @@ final class AudioStreamService {
     }
     
     /// Parses adaptive formats and picks the closest M4A stream matching target bitrate.
-    private func extractAudioURL(from data: Data, targetBitrate: Int) -> URL? {
+    /// If an instance emits a direct googlevideo URL, reroutes through the instance proxy to prevent client 403s.
+    private func extractAudioURL(from data: Data, targetBitrate: Int, instance: String) -> URL? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
@@ -56,6 +58,20 @@ final class AudioStreamService {
                 
                 let bitrate = (format["bitrate"] as? Int) ?? 0
                 let isM4A = type.contains("audio/mp4")
+                
+                // If stream is googlevideo, proxy through the Invidious instance host
+                if urlStr.contains("googlevideo.com"),
+                   let instURL = URL(string: instance),
+                   var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                    components.scheme = instURL.scheme
+                    components.host = instURL.host
+                    components.port = instURL.port
+                    if let proxiedURL = components.url {
+                        audioStreams.append((url: proxiedURL, bitrate: bitrate, isM4A: isM4A))
+                        continue
+                    }
+                }
+                
                 audioStreams.append((url: url, bitrate: bitrate, isM4A: isM4A))
             }
             

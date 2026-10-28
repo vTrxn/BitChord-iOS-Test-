@@ -69,6 +69,7 @@ final class AudioPlayerManager: ObservableObject {
         configureAudioSession()
         setupNotifications()
         setupRemoteCommands()
+        UIApplication.shared.beginReceivingRemoteControlEvents()
     }
     
     /// Activates the AVAudioSession with `.playback` category for background playback.
@@ -198,6 +199,7 @@ final class AudioPlayerManager: ObservableObject {
             player?.replaceCurrentItem(with: playerItem)
         }
         
+        try? AVAudioSession.sharedInstance().setActive(true)
         player?.play()
         
         let interval = CMTime(seconds: 0.25, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
@@ -244,6 +246,7 @@ final class AudioPlayerManager: ObservableObject {
     }
     
     func resume() {
+        try? AVAudioSession.sharedInstance().setActive(true)
         player?.play()
         isPlaying = true
         updateNowPlayingInfo()

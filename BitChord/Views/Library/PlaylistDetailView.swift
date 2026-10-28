@@ -62,6 +62,6 @@ struct PlaylistDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .padding(.bottom, player.currentSong != nil ? 64 : 0)
+        .padding(.bottom, player.currentSong != nil ? 130 : 64)
     }
 }

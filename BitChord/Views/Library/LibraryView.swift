@@ -142,7 +142,7 @@ struct LibraryView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Library")
-            .padding(.bottom, player.currentSong != nil ? 64 : 0)
+            .padding(.bottom, player.currentSong != nil ? 130 : 64)
             .alert("Create Playlist", isPresented: $showingCreatePlaylist) {
                 TextField("Playlist Name", text: $newPlaylistName)
                 Button("Cancel", role: .cancel) {}

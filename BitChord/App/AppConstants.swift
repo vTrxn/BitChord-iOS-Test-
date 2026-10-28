@@ -8,12 +8,13 @@ enum AppConstants {
     static let buildNumber = "1"
     
     /// Default HTTPS instances used for YouTube audio streams and search metadata.
-    /// These nodes support the Invidious REST API format.
+    /// These nodes support the Invidious REST API format with stream proxying.
     static let defaultInstances: [String] = [
         "https://yt.chocolatemoo53.com",
-        "https://invidious.nerdvpn.de",
+        "https://invidious.jing.rocks",
         "https://inv.nadeko.net",
-        "https://invidious.tiekoetter.com"
+        "https://invidious.projectsegfau.lt",
+        "https://invidious.einfachzocken.eu"
     ]
     
     /// Base URL for the LRCLIB open-source lyrics provider.

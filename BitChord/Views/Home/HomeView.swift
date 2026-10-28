@@ -86,7 +86,7 @@ struct HomeView: View {
                             }
                         }
                         .padding(.vertical, 16)
-                        .padding(.bottom, player.currentSong != nil ? 64 : 16)
+                        .padding(.bottom, player.currentSong != nil ? 130 : 64)
                     }
                     .refreshable {
                         await loadHomeContent()
