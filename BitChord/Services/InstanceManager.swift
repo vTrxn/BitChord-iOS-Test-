@@ -2,6 +2,7 @@ import Foundation
 
 /// Manages active and fallback Invidious API server endpoints.
 /// Evaluates node availability and saves the user-selected instance in UserDefaults.
+@MainActor
 final class InstanceManager: ObservableObject {
     static let shared = InstanceManager()
     
@@ -32,17 +33,17 @@ final class InstanceManager: ObservableObject {
     /// Fetches the live Invidious instance directory, filters for operational HTTPS endpoints,
     /// and populates the available instances list.
     func refreshInstances() async {
-        await MainActor.run { self.isCheckingHealth = true }
+        self.isCheckingHealth = true
         
         guard let url = URL(string: AppConstants.instancesListURL) else {
-            await MainActor.run { self.isCheckingHealth = false }
+            self.isCheckingHealth = false
             return
         }
         
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                await MainActor.run { self.isCheckingHealth = false }
+                self.isCheckingHealth = false
                 return
             }
             
@@ -59,13 +60,11 @@ final class InstanceManager: ObservableObject {
                 }
                 
                 if !valid.isEmpty {
-                    await MainActor.run {
-                        self.availableInstances = valid
-                        if !valid.contains(self.activeInstance) {
-                            self.setInstance(valid[0])
-                        }
-                        self.isCheckingHealth = false
+                    self.availableInstances = valid
+                    if !valid.contains(self.activeInstance) {
+                        self.setInstance(valid[0])
                     }
+                    self.isCheckingHealth = false
                     return
                 }
             }
@@ -73,6 +72,6 @@ final class InstanceManager: ObservableObject {
             // Keep default instances on failure
         }
         
-        await MainActor.run { self.isCheckingHealth = false }
+        self.isCheckingHealth = false
     }
 }

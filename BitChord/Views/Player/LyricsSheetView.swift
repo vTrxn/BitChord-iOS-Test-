@@ -34,7 +34,7 @@ struct LyricsSheetView: View {
                             .padding(.horizontal, 24)
                             .padding(.vertical, 32)
                         }
-                        .onChange(of: player.activeLyricIndex) { newIndex in
+                        .onChange(of: player.activeLyricIndex) { oldValue, newIndex in
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 proxy.scrollTo(newIndex, anchor: .center)
                             }

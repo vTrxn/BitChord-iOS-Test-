@@ -10,7 +10,8 @@ final class AudioStreamService {
     /// Resolves direct audio stream URL for a given video ID and target quality.
     /// Iterates through configured server instances until an operational stream is returned.
     func resolveStreamURL(videoId: String, quality: StreamQuality = .high) async throws -> URL {
-        let instances = [InstanceManager.shared.activeInstance] + AppConstants.defaultInstances.filter { $0 != InstanceManager.shared.activeInstance }
+        let primaryInstance = await MainActor.run { InstanceManager.shared.activeInstance }
+        let instances = [primaryInstance] + AppConstants.defaultInstances.filter { $0 != primaryInstance }
         
         for instance in instances {
             guard let url = URL(string: "\(instance)/api/v1/videos/\(videoId)") else { continue }

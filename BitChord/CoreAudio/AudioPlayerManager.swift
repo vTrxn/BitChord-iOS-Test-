@@ -20,6 +20,7 @@ enum RepeatMode: String, CaseIterable {
 
 /// Core audio engine managing playback, background audio session, queue state, and system events.
 /// ObservableObject publishing player updates directly to SwiftUI views on the main thread.
+@MainActor
 final class AudioPlayerManager: ObservableObject {
     static let shared = AudioPlayerManager()
     
@@ -106,12 +107,24 @@ final class AudioPlayerManager: ObservableObject {
     /// Binds lockscreen and Control Center media keys to playback controls.
     private func setupRemoteCommands() {
         NowPlayingManager.shared.setupRemoteCommands(
-            onPlay: { [weak self] in self?.resume() },
-            onPause: { [weak self] in self?.pause() },
-            onTogglePlayPause: { [weak self] in self?.togglePlayPause() },
-            onNext: { [weak self] in self?.next() },
-            onPrevious: { [weak self] in self?.previous() },
-            onSeek: { [weak self] time in self?.seek(to: time) }
+            onPlay: { [weak self] in
+                Task { @MainActor in self?.resume() }
+            },
+            onPause: { [weak self] in
+                Task { @MainActor in self?.pause() }
+            },
+            onTogglePlayPause: { [weak self] in
+                Task { @MainActor in self?.togglePlayPause() }
+            },
+            onNext: { [weak self] in
+                Task { @MainActor in self?.next() }
+            },
+            onPrevious: { [weak self] in
+                Task { @MainActor in self?.previous() }
+            },
+            onSeek: { [weak self] time in
+                Task { @MainActor in self?.seek(to: time) }
+            }
         )
     }
     
@@ -158,22 +171,18 @@ final class AudioPlayerManager: ObservableObject {
                 playbackURL = try await AudioStreamService.shared.resolveStreamURL(videoId: song.id)
             }
             
-            await MainActor.run {
-                self.setupPlayer(with: playbackURL)
-                self.isLoading = false
-                self.isPlaying = true
-                self.updateNowPlayingInfo()
-            }
+            self.setupPlayer(with: playbackURL)
+            self.isLoading = false
+            self.isPlaying = true
+            self.updateNowPlayingInfo()
             
             if let thumbURL = song.highResThumbnailURL {
                 loadArtwork(from: thumbURL)
             }
         } catch {
-            await MainActor.run {
-                self.isLoading = false
-                self.isPlaying = false
-                self.errorMessage = error.localizedDescription
-            }
+            self.isLoading = false
+            self.isPlaying = false
+            self.errorMessage = error.localizedDescription
         }
     }
     
@@ -211,9 +220,7 @@ final class AudioPlayerManager: ObservableObject {
     /// Queries LRCLIB for track lyrics.
     private func fetchLyrics(for song: Song) async {
         let fetched = await LyricsService.shared.fetchLyrics(for: song)
-        await MainActor.run {
-            self.lyrics = fetched
-        }
+        self.lyrics = fetched
     }
     
     /// Computes the index of the line active at the specified playback second.
@@ -348,10 +355,8 @@ final class AudioPlayerManager: ObservableObject {
         Task {
             if let (data, _) = try? await URLSession.shared.data(from: url),
                let image = UIImage(data: data) {
-                await MainActor.run {
-                    self.artworkCache[song.id] = image
-                    self.updateNowPlayingInfo()
-                }
+                self.artworkCache[song.id] = image
+                self.updateNowPlayingInfo()
             }
         }
     }
@@ -363,45 +368,50 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
-    @objc private func handleTrackEnded() {
-        next()
+    @objc private nonisolated func handleTrackEnded() {
+        Task { @MainActor in
+            self.next()
+        }
     }
     
-    @objc private func handleAudioInterruption(_ notification: Notification) {
+    @objc private nonisolated func handleAudioInterruption(_ notification: Notification) {
         guard let info = notification.userInfo,
               let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
               let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
             return
         }
         
-        switch type {
-        case .began:
-            pause()
-        case .ended:
-            if let optionsValue = info[AVAudioSessionInterruptionOptionKey] as? UInt {
-                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-                if options.contains(.shouldResume) {
-                    resume()
+        Task { @MainActor in
+            switch type {
+            case .began:
+                self.pause()
+            case .ended:
+                if let optionsValue = info[AVAudioSessionInterruptionOptionKey] as? UInt {
+                    let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+                    if options.contains(.shouldResume) {
+                        self.resume()
+                    }
                 }
+            @unknown default:
+                break
             }
-        @unknown default:
-            break
         }
     }
     
-    @objc private func handleRouteChange(_ notification: Notification) {
+    @objc private nonisolated func handleRouteChange(_ notification: Notification) {
         guard let info = notification.userInfo,
               let reasonValue = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
               let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
             return
         }
-        if reason == .oldDeviceUnavailable {
-            pause()
+        Task { @MainActor in
+            if reason == .oldDeviceUnavailable {
+                self.pause()
+            }
         }
     }
     
-    deinit {
-        removeTimeObserver()
+    nonisolated deinit {
         NotificationCenter.default.removeObserver(self)
     }
 }

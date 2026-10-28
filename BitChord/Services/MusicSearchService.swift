@@ -37,7 +37,8 @@ final class MusicSearchService {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         
-        let instances = [InstanceManager.shared.activeInstance] + AppConstants.defaultInstances.filter { $0 != InstanceManager.shared.activeInstance }
+        let primaryInstance = await MainActor.run { InstanceManager.shared.activeInstance }
+        let instances = [primaryInstance] + AppConstants.defaultInstances.filter { $0 != primaryInstance }
         
         for instance in instances {
             guard var components = URLComponents(string: "\(instance)/api/v1/search") else { continue }
@@ -72,7 +73,8 @@ final class MusicSearchService {
     
     /// Fetches currently popular tracks from the server or falls back to a curated chart query.
     func fetchTrending() async throws -> [Song] {
-        let instances = [InstanceManager.shared.activeInstance] + AppConstants.defaultInstances.filter { $0 != InstanceManager.shared.activeInstance }
+        let primaryInstance = await MainActor.run { InstanceManager.shared.activeInstance }
+        let instances = [primaryInstance] + AppConstants.defaultInstances.filter { $0 != primaryInstance }
         
         for instance in instances {
             guard let url = URL(string: "\(instance)/api/v1/popular") else { continue }

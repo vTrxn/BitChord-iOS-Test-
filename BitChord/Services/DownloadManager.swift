@@ -2,6 +2,7 @@ import Foundation
 
 /// Coordinates downloading tracks to the app's sandboxed Documents directory for offline use.
 /// Keeps track of active downloads and persists metadata of stored tracks.
+@MainActor
 final class DownloadManager: ObservableObject {
     static let shared = DownloadManager()
     
@@ -41,9 +42,7 @@ final class DownloadManager: ObservableObject {
     func downloadSong(_ song: Song) async {
         guard !isDownloaded(songId: song.id), !isDownloading(songId: song.id) else { return }
         
-        await MainActor.run {
-            self.downloadingSongIds.insert(song.id)
-        }
+        self.downloadingSongIds.insert(song.id)
         
         do {
             let streamURL: URL
@@ -65,16 +64,12 @@ final class DownloadManager: ObservableObject {
             savedSong.isDownloaded = true
             savedSong.localFilePath = localURL.path
             
-            await MainActor.run {
-                self.downloadedSongs.removeAll { $0.id == song.id }
-                self.downloadedSongs.insert(savedSong, at: 0)
-                self.downloadingSongIds.remove(song.id)
-                self.persistDownloads()
-            }
+            self.downloadedSongs.removeAll { $0.id == song.id }
+            self.downloadedSongs.insert(savedSong, at: 0)
+            self.downloadingSongIds.remove(song.id)
+            self.persistDownloads()
         } catch {
-            await MainActor.run {
-                self.downloadingSongIds.remove(song.id)
-            }
+            self.downloadingSongIds.remove(song.id)
         }
     }
     

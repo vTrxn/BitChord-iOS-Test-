@@ -2,6 +2,7 @@ import Foundation
 
 /// Manages local user data: Liked Songs, custom playlists, and recently played history.
 /// Saves serialized JSON data directly to UserDefaults.
+@MainActor
 final class FavoritesManager: ObservableObject {
     static let shared = FavoritesManager()
     
