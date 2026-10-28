@@ -2,11 +2,13 @@ import Foundation
 import MediaPlayer
 import UIKit
 
+/// Configures iOS lockscreen, CarPlay, and Dynamic Island playback metadata and command listeners.
 final class NowPlayingManager {
     static let shared = NowPlayingManager()
     
     private init() {}
     
+    /// Registers target action handlers on `MPRemoteCommandCenter` for remote playback actions.
     func setupRemoteCommands(
         onPlay: @escaping () -> Void,
         onPause: @escaping () -> Void,
@@ -57,6 +59,7 @@ final class NowPlayingManager {
         }
     }
     
+    /// Updates the dictionary in `MPNowPlayingInfoCenter.default().nowPlayingInfo`.
     func updateNowPlaying(
         song: Song,
         currentTime: TimeInterval,

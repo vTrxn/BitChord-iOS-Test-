@@ -1,18 +1,31 @@
 import Foundation
 
+/// Represents a single synchronized lyrics line with an exact time offset.
 struct LyricLine: Identifiable, Equatable {
     let id = UUID()
+    
+    /// Offset in seconds from track start when this line begins.
     let timestamp: TimeInterval
+    
+    /// Lyric text content.
     let text: String
 }
 
+/// Container for processed lyrics, providing both synchronized timestamps and plain text fallbacks.
 struct ParsedLyrics: Equatable {
+    /// True when time-synchronized LRC data is present.
     let isSynced: Bool
+    
+    /// Array of ordered lines with millisecond precision timestamps.
     let lines: [LyricLine]
+    
+    /// Complete plain-text lyrics without timestamp tags.
     let plainText: String
     
     static let empty = ParsedLyrics(isSynced: false, lines: [], plainText: "")
     
+    /// Parses standard LRC strings (e.g. `[01:23.45] Lyric text`) into sorted timestamped lines.
+    /// Supports both 2-digit and 3-digit millisecond fractions.
     static func parseLRC(_ lrcString: String) -> [LyricLine] {
         var parsed: [LyricLine] = []
         let rawLines = lrcString.components(separatedBy: .newlines)

@@ -1,5 +1,6 @@
 import Foundation
 
+/// User-created collection of tracks with custom ordering and metadata.
 struct Playlist: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
@@ -15,6 +16,7 @@ struct Playlist: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
     }
     
+    /// Sum of all tracks formatted in hours and minutes.
     var totalDurationFormatted: String {
         let totalSeconds = songs.reduce(0) { $0 + $1.durationSeconds }
         let minutes = totalSeconds / 60

@@ -1,12 +1,13 @@
 import SwiftUI
 
+/// In-memory image caching layer backed by NSCache with a 60MB limit.
 final class ImageCacheManager {
     static let shared = ImageCacheManager()
     private let cache = NSCache<NSURL, UIImage>()
     
     private init() {
         cache.countLimit = 150
-        cache.totalCostLimit = 1024 * 1024 * 60 // 60MB
+        cache.totalCostLimit = 1024 * 1024 * 60
     }
     
     func image(for url: URL) -> UIImage? {
@@ -18,6 +19,7 @@ final class ImageCacheManager {
     }
 }
 
+/// Asynchronous image view that checks memory cache before issuing network requests.
 struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     let url: URL?
     @ViewBuilder let content: (Image) -> Content
@@ -55,7 +57,7 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                 }
             }
         } catch {
-            // Keep placeholder on failure
+            // Placeholder remains visible when network fails
         }
     }
 }

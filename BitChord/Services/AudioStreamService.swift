@@ -1,10 +1,14 @@
 import Foundation
 
+/// Resolves playable direct HTTP audio URLs for a given track identifier.
+/// Extracts M4A/AAC streams compatible with iOS hardware decoders.
 final class AudioStreamService {
     static let shared = AudioStreamService()
     
     private init() {}
     
+    /// Resolves direct audio stream URL for a given video ID and target quality.
+    /// Iterates through configured server instances until an operational stream is returned.
     func resolveStreamURL(videoId: String, quality: StreamQuality = .high) async throws -> URL {
         let instances = [InstanceManager.shared.activeInstance] + AppConstants.defaultInstances.filter { $0 != InstanceManager.shared.activeInstance }
         
@@ -32,12 +36,12 @@ final class AudioStreamService {
         throw NetworkError.noAvailableInstance
     }
     
+    /// Parses adaptive formats and picks the closest M4A stream matching target bitrate.
     private func extractAudioURL(from data: Data, targetBitrate: Int) -> URL? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
         
-        // Check adaptiveFormats for audio/mp4 (best compatibility with iOS AVPlayer)
         if let adaptiveFormats = json["adaptiveFormats"] as? [[String: Any]] {
             var audioStreams: [(url: URL, bitrate: Int, isM4A: Bool)] = []
             
@@ -54,18 +58,15 @@ final class AudioStreamService {
                 audioStreams.append((url: url, bitrate: bitrate, isM4A: isM4A))
             }
             
-            // Prefer m4a formats because AVPlayer natively decodes AAC with zero overhead
             let m4aStreams = audioStreams.filter { $0.isM4A }
             let pool = !m4aStreams.isEmpty ? m4aStreams : audioStreams
             
             if !pool.isEmpty {
-                // Find stream closest to user's desired bitrate
                 let sorted = pool.sorted { abs($0.bitrate - targetBitrate) < abs($1.bitrate - targetBitrate) }
                 return sorted.first?.url
             }
         }
         
-        // Fallback to formatStreams
         if let formatStreams = json["formatStreams"] as? [[String: Any]] {
             for format in formatStreams {
                 if let urlStr = format["url"] as? String, let url = URL(string: urlStr) {

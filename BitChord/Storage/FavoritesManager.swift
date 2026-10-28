@@ -1,10 +1,17 @@
 import Foundation
 
+/// Manages local user data: Liked Songs, custom playlists, and recently played history.
+/// Saves serialized JSON data directly to UserDefaults.
 final class FavoritesManager: ObservableObject {
     static let shared = FavoritesManager()
     
+    /// User's favorite tracks.
     @Published var likedSongs: [Song] = []
+    
+    /// Chronological list of recently played tracks (capped at 50).
     @Published var recentlyPlayed: [Song] = []
+    
+    /// Custom playlists created by the user.
     @Published var customPlaylists: [Playlist] = []
     
     private init() {
@@ -15,6 +22,7 @@ final class FavoritesManager: ObservableObject {
         likedSongs.contains { $0.id == songId }
     }
     
+    /// Adds or removes track from Liked Songs collection.
     func toggleLike(song: Song) {
         if isLiked(songId: song.id) {
             likedSongs.removeAll { $0.id == song.id }
@@ -24,6 +32,7 @@ final class FavoritesManager: ObservableObject {
         persistLiked()
     }
     
+    /// Appends track to recently played history, maintaining a maximum size of 50.
     func recordRecent(song: Song) {
         recentlyPlayed.removeAll { $0.id == song.id }
         recentlyPlayed.insert(song, at: 0)

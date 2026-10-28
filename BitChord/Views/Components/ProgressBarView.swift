@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// Flat progress bar and interactive scrubber slider for audio tracks.
+/// Computes drag offsets in real-time and calls `onSeek` when the drag finishes.
 struct ProgressBarView: View {
     @Binding var currentTime: TimeInterval
     let duration: TimeInterval
@@ -22,19 +24,16 @@ struct ProgressBarView: View {
                 let progress = duration > 0 ? min(max(effectiveTime / duration, 0), 1) : 0
                 
                 ZStack(alignment: .leading) {
-                    // Track background
                     Rectangle()
                         .fill(Color(.systemFill))
                         .frame(height: 4)
                         .cornerRadius(2)
                     
-                    // Active progress
                     Rectangle()
                         .fill(Color.accentColor)
                         .frame(width: max(0, width * CGFloat(progress)), height: 4)
                         .cornerRadius(2)
                     
-                    // Scrubber knob
                     Circle()
                         .fill(Color.primary)
                         .frame(width: isDragging ? 16 : 10, height: isDragging ? 16 : 10)
@@ -59,7 +58,6 @@ struct ProgressBarView: View {
             }
             .frame(height: 24)
             
-            // Time Labels
             HStack {
                 Text(formatTime(effectiveTime))
                     .font(.caption.monospacedDigit())

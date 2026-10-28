@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// Standard track list item with thumbnail art, metadata, context menu, and active playback indicator.
 struct SongRowView: View {
     let song: Song
     let isCurrentSong: Bool
@@ -13,7 +14,6 @@ struct SongRowView: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 14) {
-                // Artwork
                 CachedAsyncImage(url: song.thumbnailURL) { image in
                     image
                         .resizable()
@@ -28,7 +28,6 @@ struct SongRowView: View {
                 .frame(width: 48, height: 48)
                 .cornerRadius(6)
                 
-                // Song Metadata
                 VStack(alignment: .leading, spacing: 4) {
                     Text(song.title)
                         .font(.body.weight(.medium))
@@ -50,7 +49,6 @@ struct SongRowView: View {
                 
                 Spacer()
                 
-                // Duration & Actions
                 Text(song.formattedDuration)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -106,6 +104,7 @@ struct SongRowView: View {
     }
 }
 
+/// Modal selector sheet allowing the user to add the selected song to an existing or new playlist.
 struct AddToPlaylistSheet: View {
     let song: Song
     @Environment(\.dismiss) private var dismiss

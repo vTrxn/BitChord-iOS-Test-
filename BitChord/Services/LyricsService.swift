@@ -1,12 +1,15 @@
 import Foundation
 
+/// Integrates with the LRCLIB open-source lyrics repository.
+/// Retrieves time-synchronized or plain text lyrics based on artist and track names.
 final class LyricsService {
     static let shared = LyricsService()
     
     private init() {}
     
+    /// Fetches lyrics for the provided Song model.
+    /// Tries exact matching first, falling back to query search if exact match returns 404.
     func fetchLyrics(for song: Song) async -> ParsedLyrics {
-        // Step 1: Try exact lookup with cleaned artist and track
         let cleanArtist = sanitize(song.artist)
         let cleanTrack = sanitize(song.title)
         
@@ -14,10 +17,10 @@ final class LyricsService {
             return exactLyrics
         }
         
-        // Step 2: Fall back to LRCLIB search endpoint
         return await trySearchLookup(query: "\(cleanArtist) \(cleanTrack)")
     }
     
+    /// Queries `/api/get` with exact artist, track, and duration parameters.
     private func tryExactLookup(artist: String, track: String, duration: Int) async -> ParsedLyrics? {
         guard var components = URLComponents(string: "\(AppConstants.lrclibBaseURL)/get") else {
             return nil
@@ -49,6 +52,7 @@ final class LyricsService {
         }
     }
     
+    /// Queries `/api/search` with free-text query when exact lookup produces no match.
     private func trySearchLookup(query: String) async -> ParsedLyrics {
         guard var components = URLComponents(string: "\(AppConstants.lrclibBaseURL)/search") else {
             return .empty
@@ -79,6 +83,7 @@ final class LyricsService {
         }
     }
     
+    /// Deserializes LRCLIB JSON payload into ParsedLyrics.
     private func parseLrcLibJSON(_ data: Data) -> ParsedLyrics? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
@@ -102,6 +107,7 @@ final class LyricsService {
         return nil
     }
     
+    /// Strips YouTube channel suffixes and guest-feature tags to improve search hit rates.
     private func sanitize(_ string: String) -> String {
         var result = string
         let regexes = [

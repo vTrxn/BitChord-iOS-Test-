@@ -1,10 +1,17 @@
 import Foundation
 
+/// Manages active and fallback Invidious API server endpoints.
+/// Evaluates node availability and saves the user-selected instance in UserDefaults.
 final class InstanceManager: ObservableObject {
     static let shared = InstanceManager()
     
+    /// The primary instance currently used for search and audio extraction.
     @Published var activeInstance: String
+    
+    /// Cached list of public HTTPS instances supporting API calls.
     @Published var availableInstances: [String] = AppConstants.defaultInstances
+    
+    /// True while querying the remote instances directory.
     @Published var isCheckingHealth: Bool = false
     
     private init() {
@@ -12,6 +19,7 @@ final class InstanceManager: ObservableObject {
         self.activeInstance = saved ?? AppConstants.defaultInstances[0]
     }
     
+    /// Updates the active instance and strips any trailing slashes.
     func setInstance(_ urlString: String) {
         var cleanURL = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleanURL.hasSuffix("/") {
@@ -21,6 +29,8 @@ final class InstanceManager: ObservableObject {
         UserDefaults.standard.set(cleanURL, forKey: AppConstants.StorageKey.selectedInstance)
     }
     
+    /// Fetches the live Invidious instance directory, filters for operational HTTPS endpoints,
+    /// and populates the available instances list.
     func refreshInstances() async {
         await MainActor.run { self.isCheckingHealth = true }
         
@@ -36,7 +46,6 @@ final class InstanceManager: ObservableObject {
                 return
             }
             
-            // Format is [[String, [String: Any]]]
             if let json = try JSONSerialization.jsonObject(with: data) as? [[Any]] {
                 var valid: [String] = []
                 for entry in json {
@@ -61,7 +70,7 @@ final class InstanceManager: ObservableObject {
                 }
             }
         } catch {
-            // Fall back to default instances
+            // Keep default instances on failure
         }
         
         await MainActor.run { self.isCheckingHealth = false }

@@ -1,5 +1,6 @@
 import Foundation
 
+/// Specific network error states for user presentation and retry flows.
 enum NetworkError: LocalizedError {
     case invalidURL
     case serverError(statusCode: Int)
@@ -23,11 +24,15 @@ enum NetworkError: LocalizedError {
     }
 }
 
+/// Handles querying track metadata, trending lists, and catalog searches.
+/// Automatically falls back across multiple instances when an endpoint fails or times out.
 final class MusicSearchService {
     static let shared = MusicSearchService()
     
     private init() {}
     
+    /// Queries the search endpoint for tracks matching the text query.
+    /// Iterates through the active and backup instances if the primary node is degraded.
     func searchSongs(query: String) async throws -> [Song] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
@@ -65,6 +70,7 @@ final class MusicSearchService {
         throw NetworkError.noAvailableInstance
     }
     
+    /// Fetches currently popular tracks from the server or falls back to a curated chart query.
     func fetchTrending() async throws -> [Song] {
         let instances = [InstanceManager.shared.activeInstance] + AppConstants.defaultInstances.filter { $0 != InstanceManager.shared.activeInstance }
         
@@ -89,10 +95,10 @@ final class MusicSearchService {
             }
         }
         
-        // Fallback: search for top global hits if popular endpoint is disabled on the instance
         return try await searchSongs(query: "Top Global Hits 2024")
     }
     
+    /// Transforms raw Invidious JSON search response into typed Song models.
     private func parseSearchItems(from data: Data) -> [Song] {
         guard let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             return []
@@ -110,7 +116,6 @@ final class MusicSearchService {
             
             var thumbURL: URL? = nil
             if let thumbnails = item["videoThumbnails"] as? [[String: Any]] {
-                // Find highest resolution available
                 if let last = thumbnails.last, let urlStr = last["url"] as? String {
                     thumbURL = URL(string: urlStr)
                 }
@@ -133,6 +138,7 @@ final class MusicSearchService {
         return results
     }
     
+    /// Removes boilerplate metadata tags like "(Official Video)" or "[Audio]" from track titles.
     private func cleanTitle(_ title: String) -> String {
         var cleaned = title
         let removablePatterns = [

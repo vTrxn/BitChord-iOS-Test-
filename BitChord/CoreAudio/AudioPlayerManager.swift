@@ -3,6 +3,7 @@ import AVFoundation
 import MediaPlayer
 import UIKit
 
+/// Playback repetition mode.
 enum RepeatMode: String, CaseIterable {
     case off = "Off"
     case all = "All"
@@ -17,20 +18,45 @@ enum RepeatMode: String, CaseIterable {
     }
 }
 
+/// Core audio engine managing playback, background audio session, queue state, and system events.
+/// ObservableObject publishing player updates directly to SwiftUI views on the main thread.
 final class AudioPlayerManager: ObservableObject {
     static let shared = AudioPlayerManager()
     
+    /// Track currently playing or loaded in the player.
     @Published var currentSong: Song?
+    
+    /// Playback state.
     @Published var isPlaying: Bool = false
+    
+    /// True while network stream resolution or audio buffering is in progress.
     @Published var isLoading: Bool = false
+    
+    /// Current playback progress in seconds.
     @Published var currentTime: TimeInterval = 0
+    
+    /// Total duration of the active audio item in seconds.
     @Published var duration: TimeInterval = 1
+    
+    /// Ordered list of upcoming tracks.
     @Published var queue: [Song] = []
+    
+    /// Index of the currently active track within `queue`.
     @Published var currentIndex: Int = 0
+    
+    /// Shuffle mode state.
     @Published var isShuffleEnabled: Bool = false
+    
+    /// Repeat behavior when a track finishes playing.
     @Published var repeatMode: RepeatMode = .off
+    
+    /// Lyrics model loaded for `currentSong`.
     @Published var lyrics: ParsedLyrics = .empty
+    
+    /// Index of the current active line in `lyrics.lines` matching `currentTime`.
     @Published var activeLyricIndex: Int = 0
+    
+    /// User-facing error message if stream loading fails.
     @Published var errorMessage: String?
     
     private var player: AVPlayer?
@@ -44,6 +70,7 @@ final class AudioPlayerManager: ObservableObject {
         setupRemoteCommands()
     }
     
+    /// Activates the AVAudioSession with `.playback` category for background playback.
     private func configureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
@@ -54,6 +81,7 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
+    /// Registers observers for track completion, audio interruptions, and headphone route changes.
     private func setupNotifications() {
         NotificationCenter.default.addObserver(
             self,
@@ -75,6 +103,7 @@ final class AudioPlayerManager: ObservableObject {
         )
     }
     
+    /// Binds lockscreen and Control Center media keys to playback controls.
     private func setupRemoteCommands() {
         NowPlayingManager.shared.setupRemoteCommands(
             onPlay: { [weak self] in self?.resume() },
@@ -86,6 +115,7 @@ final class AudioPlayerManager: ObservableObject {
         )
     }
     
+    /// Initiates playback for a track and configures the active queue.
     func playSong(_ song: Song, queue: [Song] = []) {
         self.currentSong = song
         self.errorMessage = nil
@@ -115,11 +145,11 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
+    /// Resolves local or remote audio stream and starts player item playback.
     private func startPlayback(for song: Song) async {
         do {
             let playbackURL: URL
             
-            // Check if downloaded locally
             if let localPath = song.localFilePath, FileManager.default.fileExists(atPath: localPath) {
                 playbackURL = URL(fileURLWithPath: localPath)
             } else if let streamURL = song.streamURL {
@@ -135,7 +165,6 @@ final class AudioPlayerManager: ObservableObject {
                 self.updateNowPlayingInfo()
             }
             
-            // Fetch high-res artwork for lockscreen in background
             if let thumbURL = song.highResThumbnailURL {
                 loadArtwork(from: thumbURL)
             }
@@ -148,6 +177,7 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
+    /// Replaces player item and registers periodic time observer updating 4 times per second.
     private func setupPlayer(with url: URL) {
         removeTimeObserver()
         
@@ -178,6 +208,7 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
+    /// Queries LRCLIB for track lyrics.
     private func fetchLyrics(for song: Song) async {
         let fetched = await LyricsService.shared.fetchLyrics(for: song)
         await MainActor.run {
@@ -185,6 +216,7 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
+    /// Computes the index of the line active at the specified playback second.
     private func updateActiveLyricIndex(at currentTime: TimeInterval) {
         guard lyrics.isSynced, !lyrics.lines.isEmpty else { return }
         if let idx = lyrics.lines.lastIndex(where: { $0.timestamp <= currentTime }) {
@@ -214,6 +246,7 @@ final class AudioPlayerManager: ObservableObject {
         updateNowPlayingInfo()
     }
     
+    /// Seeks playback position to the given target time in seconds.
     func seek(to seconds: TimeInterval) {
         let target = CMTime(seconds: seconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         player?.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
@@ -221,6 +254,7 @@ final class AudioPlayerManager: ObservableObject {
         updateNowPlayingInfo()
     }
     
+    /// Advances to the next track in queue or loops based on repeatMode.
     func next() {
         guard !queue.isEmpty else { return }
         if repeatMode == .one, let song = currentSong {
@@ -241,8 +275,8 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
+    /// Restarts current track if playback elapsed is > 3 seconds, or moves to previous track.
     func previous() {
-        // If current song is already played > 3 seconds, restart it
         if currentTime > 3 {
             seek(to: 0)
             return
@@ -252,11 +286,12 @@ final class AudioPlayerManager: ObservableObject {
         if prevIndex >= 0 {
             currentIndex = prevIndex
             playSong(queue[prevIndex], queue: queue)
-        } else if let song = currentSong {
+        } else if let _ = currentSong {
             seek(to: 0)
         }
     }
     
+    /// Toggles shuffle mode, reordering the upcoming queue while preserving current track.
     func toggleShuffle() {
         isShuffleEnabled.toggle()
         guard let current = currentSong else { return }
@@ -274,6 +309,7 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
+    /// Cycles through repeat modes: off -> all -> one -> off.
     func toggleRepeat() {
         switch repeatMode {
         case .off: repeatMode = .all
@@ -282,6 +318,7 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
+    /// Sends current track details to lock screen and Control Center.
     private func updateNowPlayingInfo() {
         guard let song = currentSong else { return }
         let artwork = artworkCache[song.id]
@@ -294,6 +331,7 @@ final class AudioPlayerManager: ObservableObject {
         )
     }
     
+    /// Asynchronously downloads and caches artwork for lockscreen display.
     private func loadArtwork(from url: URL) {
         guard let song = currentSong else { return }
         if let cached = artworkCache[song.id] {
@@ -357,7 +395,6 @@ final class AudioPlayerManager: ObservableObject {
               let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
             return
         }
-        // Pause audio if headphones unplugged
         if reason == .oldDeviceUnavailable {
             pause()
         }
