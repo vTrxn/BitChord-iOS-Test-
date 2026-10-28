@@ -21,12 +21,12 @@ jobs:
 
       - name: Generate Xcode Project
         run: |
-          xcodegen generate 2>&1 | tee xcodegen.log
+          xcodegen generate 2>&1 | tee xcodegen.log || python3 generate_project.py
 
       - name: Build Application
         run: |
           mkdir -p build
-          set -o pipefail
+          BUILD_FAILED=0
           xcodebuild archive \
             -project BitChord.xcodeproj \
             -scheme BitChord \
@@ -37,7 +37,16 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            clean archive 2>&1 | tee build/build.log
+            clean archive > build/build.log 2>&1 || BUILD_FAILED=1
+
+          if [ "$BUILD_FAILED" = "1" ]; then
+            # Capture the last 20 lines of the build log into a GitHub Actions error annotation
+            SUMMARY=$(tail -n 25 build/build.log | tr '\n' ' ' | tr '\r' ' ')
+            echo "::error title=XcodeBuildError::$SUMMARY"
+            echo "=== FULL BUILD LOG ==="
+            cat build/build.log
+            exit 1
+          fi
 
       - name: Package IPA
         run: |
