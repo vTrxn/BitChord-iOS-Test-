@@ -5,6 +5,8 @@
 Built natively in **Swift and SwiftUI**, it provides ad-free music playback, background streaming, lock-screen controls, synchronized karaoke lyrics, offline downloads, and local playlists using a clean flat design.
 
 Repository: [https://github.com/vTrxn/BitChord-iOS-Test-](https://github.com/vTrxn/BitChord-iOS-Test-)
+CI/CD Pipeline: [![Build BitChord iOS IPA](https://github.com/vTrxn/BitChord-iOS-Test-/actions/workflows/build-ipa.yml/badge.svg)](https://github.com/vTrxn/BitChord-iOS-Test-/actions/workflows/build-ipa.yml)
+Latest Successful IPA Build: [GitHub Actions Run 40616912543](https://github.com/vTrxn/BitChord-iOS-Test-/actions/runs/40616912543)
 
 ---
 
