@@ -204,14 +204,16 @@ final class AudioPlayerManager: ObservableObject {
         timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self else { return }
             let seconds = CMTimeGetSeconds(time)
-            if !seconds.isNaN {
-                self.currentTime = seconds
-                self.updateActiveLyricIndex(at: seconds)
-            }
-            if let currentItem = self.player?.currentItem {
-                let itemDuration = CMTimeGetSeconds(currentItem.duration)
-                if !itemDuration.isNaN, itemDuration > 0 {
-                    self.duration = itemDuration
+            Task { @MainActor in
+                if !seconds.isNaN {
+                    self.currentTime = seconds
+                    self.updateActiveLyricIndex(at: seconds)
+                }
+                if let currentItem = self.player?.currentItem {
+                    let itemDuration = CMTimeGetSeconds(currentItem.duration)
+                    if !itemDuration.isNaN, itemDuration > 0 {
+                        self.duration = itemDuration
+                    }
                 }
             }
         }
