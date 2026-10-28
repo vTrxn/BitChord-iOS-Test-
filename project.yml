@@ -19,6 +19,25 @@ targets:
           - "**/Info.plist"
     info:
       path: BitChord/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: BitChord
+        CFBundleName: BitChord
+        CFBundleShortVersionString: "1.1.0"
+        CFBundleVersion: "2"
+        LSRequiresIPhoneOS: true
+        UILaunchScreen:
+          UIColorName: ""
+        UIBackgroundModes:
+          - audio
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bitchord.ios

@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject private var instanceManager = InstanceManager.shared
     @ObservedObject private var downloads = DownloadManager.shared
+    @ObservedObject private var player = AudioPlayerManager.shared
     
     @AppStorage(AppConstants.StorageKey.streamQuality)
     private var selectedQuality: StreamQuality = .high
@@ -140,6 +141,11 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .safeAreaInset(edge: .bottom) {
+                if player.currentSong != nil {
+                    Color.clear.frame(height: 68)
+                }
+            }
             .navigationTitle("Settings")
             .alert("Add Custom Instance", isPresented: $showingCustomInstanceAlert) {
                 TextField("https://instance.example.com", text: $customInstanceURL)

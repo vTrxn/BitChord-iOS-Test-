@@ -77,7 +77,7 @@ struct HomeView: View {
                                         .padding(.horizontal, 16)
                                         
                                         Divider()
-                                            .padding(.leading, 78)
+                                            .padding(.leading, 76)
                                     }
                                 }
                                 .background(Color(.secondarySystemGroupedBackground))
@@ -86,7 +86,11 @@ struct HomeView: View {
                             }
                         }
                         .padding(.vertical, 16)
-                        .padding(.bottom, player.currentSong != nil ? 130 : 64)
+                    }
+                    .safeAreaInset(edge: .bottom) {
+                        if player.currentSong != nil {
+                            Color.clear.frame(height: 68)
+                        }
                     }
                     .refreshable {
                         await loadHomeContent()
@@ -126,20 +130,25 @@ struct RecentSongCard: View {
     
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 CachedAsyncImage(url: song.thumbnailURL) { img in
                     img
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
-                    Rectangle()
-                        .fill(Color(.secondarySystemBackground))
+                    ZStack {
+                        Color(.tertiarySystemFill)
+                        Image(systemName: "music.note")
+                            .font(.system(size: 24))
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .frame(width: 120, height: 120)
+                .clipped()
                 .cornerRadius(8)
                 
                 Text(song.title)
-                    .font(.caption.weight(.medium))
+                    .font(.caption.weight(.semibold))
                     .foregroundColor(.primary)
                     .lineLimit(1)
                     .frame(width: 120, alignment: .leading)

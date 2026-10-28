@@ -4,8 +4,8 @@ import Foundation
 /// Holds endpoints, instance defaults, and local persistence keys.
 enum AppConstants {
     static let appName = "BitChord"
-    static let appVersion = "1.0.0"
-    static let buildNumber = "1"
+    static let appVersion = "1.1.0"
+    static let buildNumber = "2"
     
     /// Default HTTPS instances used for YouTube audio streams and search metadata.
     /// These nodes support the Invidious REST API format with stream proxying.
@@ -28,7 +28,7 @@ enum AppConstants {
         static let favorites = "bitchord_favorites_v1"
         static let playlists = "bitchord_playlists_v1"
         static let recentHistory = "bitchord_history_v1"
-        static let selectedInstance = "bitchord_selected_instance"
+        static let selectedInstance = "bitchord_selected_instance_v2"
         static let streamQuality = "bitchord_stream_quality"
         static let downloads = "bitchord_saved_downloads"
         static let searchHistory = "bitchord_search_history"

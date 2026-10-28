@@ -60,8 +60,12 @@ struct PlaylistDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .safeAreaInset(edge: .bottom) {
+            if player.currentSong != nil {
+                Color.clear.frame(height: 68)
+            }
+        }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .padding(.bottom, player.currentSong != nil ? 130 : 64)
     }
 }

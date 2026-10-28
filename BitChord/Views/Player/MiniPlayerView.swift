@@ -23,10 +23,15 @@ struct MiniPlayerView: View {
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                     } placeholder: {
-                        Rectangle()
-                            .fill(Color(.secondarySystemBackground))
+                        ZStack {
+                            Color(.tertiarySystemFill)
+                            Image(systemName: "music.note")
+                                .font(.system(size: 16))
+                                .foregroundColor(.secondary)
+                        }
                     }
                     .frame(width: 44, height: 44)
+                    .clipped()
                     .cornerRadius(6)
                     
                     // Song Title & Artist
@@ -41,8 +46,9 @@ struct MiniPlayerView: View {
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
+                    .layoutPriority(1)
                     
-                    Spacer()
+                    Spacer(minLength: 8)
                     
                     // Play / Pause Button (44x44 tap target)
                     Button {
@@ -71,7 +77,7 @@ struct MiniPlayerView: View {
                             .frame(width: 44, height: 44)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(Color(.secondarySystemBackground))
                 .contentShape(Rectangle())
@@ -80,7 +86,7 @@ struct MiniPlayerView: View {
                 }
             }
             .background(Color(.secondarySystemBackground))
-            .shadow(color: Color.black.opacity(0.08), radius: 3, x: 0, y: -2)
+            .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: -2)
         }
     }
 }

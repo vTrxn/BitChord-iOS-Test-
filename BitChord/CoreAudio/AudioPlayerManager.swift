@@ -64,6 +64,8 @@ final class AudioPlayerManager: ObservableObject {
     private var timeObserverToken: Any?
     private var artworkCache: [String: UIImage] = [:]
     private var originalQueue: [Song] = []
+    private var lastSyncedSecond: Int = -1
+    private var isAdvancingTrack: Bool = false
     
     private init() {
         configureAudioSession()
@@ -72,18 +74,18 @@ final class AudioPlayerManager: ObservableObject {
         UIApplication.shared.beginReceivingRemoteControlEvents()
     }
     
-    /// Activates the AVAudioSession with `.playback` category for background playback.
+    /// Activates the AVAudioSession with `.playback` category for continuous background and lockscreen audio.
     private func configureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, policy: .longFormAudio, options: [])
+            try session.setCategory(.playback, mode: .default, options: [])
             try session.setActive(true)
         } catch {
             print("Failed to configure AVAudioSession: \(error)")
         }
     }
     
-    /// Registers observers for track completion, audio interruptions, and headphone route changes.
+    /// Registers observers for track completion, background state transitions, audio interruptions, and route changes.
     private func setupNotifications() {
         NotificationCenter.default.addObserver(
             self,
@@ -101,6 +103,18 @@ final class AudioPlayerManager: ObservableObject {
             self,
             selector: #selector(handleRouteChange(_:)),
             name: AVAudioSession.routeChangeNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
             object: nil
         )
     }
@@ -135,6 +149,8 @@ final class AudioPlayerManager: ObservableObject {
         self.errorMessage = nil
         self.isLoading = true
         self.currentTime = 0
+        self.lastSyncedSecond = -1
+        self.isAdvancingTrack = false
         self.duration = song.durationSeconds > 0 ? Double(song.durationSeconds) : 1
         self.lyrics = .empty
         self.activeLyricIndex = 0
@@ -172,13 +188,13 @@ final class AudioPlayerManager: ObservableObject {
                 playbackURL = try await AudioStreamService.shared.resolveStreamURL(videoId: song.id)
             }
             
-            self.setupPlayer(with: playbackURL)
+            self.setupPlayer(with: playbackURL, song: song)
             self.isLoading = false
             self.isPlaying = true
             self.updateNowPlayingInfo()
             
-            if let thumbURL = song.highResThumbnailURL {
-                loadArtwork(from: thumbURL)
+            if let thumbURL = song.highResThumbnailURL ?? song.thumbnailURL {
+                loadArtwork(from: thumbURL, for: song.id)
             }
         } catch {
             self.isLoading = false
@@ -188,18 +204,26 @@ final class AudioPlayerManager: ObservableObject {
     }
     
     /// Replaces player item and registers periodic time observer updating 4 times per second.
-    private func setupPlayer(with url: URL) {
+    private func setupPlayer(with url: URL, song: Song) {
         removeTimeObserver()
+        configureAudioSession()
+        UIApplication.shared.beginReceivingRemoteControlEvents()
         
-        let playerItem = AVPlayerItem(url: url)
+        let asset = AVURLAsset(url: url)
+        let playerItem = AVPlayerItem(asset: asset)
+        
         if player == nil {
-            player = AVPlayer(playerItem: playerItem)
-            player?.automaticallyWaitsToMinimizeStalling = true
+            let newPlayer = AVPlayer(playerItem: playerItem)
+            newPlayer.automaticallyWaitsToMinimizeStalling = true
+            newPlayer.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
+            newPlayer.preventsDisplaySleepDuringVideoPlayback = false
+            player = newPlayer
         } else {
+            player?.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
+            player?.preventsDisplaySleepDuringVideoPlayback = false
             player?.replaceCurrentItem(with: playerItem)
         }
         
-        try? AVAudioSession.sharedInstance().setActive(true)
         player?.play()
         
         let interval = CMTime(seconds: 0.25, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
@@ -207,15 +231,36 @@ final class AudioPlayerManager: ObservableObject {
             guard let self = self else { return }
             let seconds = CMTimeGetSeconds(time)
             Task { @MainActor in
-                if !seconds.isNaN {
-                    self.currentTime = seconds
-                    self.updateActiveLyricIndex(at: seconds)
-                }
+                guard !seconds.isNaN, seconds >= 0 else { return }
+                self.currentTime = seconds
+                self.updateActiveLyricIndex(at: seconds)
+                
                 if let currentItem = self.player?.currentItem {
                     let itemDuration = CMTimeGetSeconds(currentItem.duration)
                     if !itemDuration.isNaN, itemDuration > 0 {
-                        self.duration = itemDuration
+                        let knownSeconds = Double(self.currentSong?.durationSeconds ?? 0)
+                        if knownSeconds <= 0 {
+                            self.duration = itemDuration
+                        } else if abs(itemDuration - knownSeconds) <= 15 {
+                            self.duration = itemDuration
+                        } else {
+                            // Keep accurate API metadata duration when DASH mvhd header reports 2x container length
+                            self.duration = knownSeconds
+                        }
                     }
+                }
+                
+                // Periodically keep Lock Screen elapsed time synced
+                let wholeSec = Int(seconds)
+                if wholeSec != self.lastSyncedSecond && wholeSec % 2 == 0 {
+                    self.lastSyncedSecond = wholeSec
+                    self.updateNowPlayingInfo()
+                }
+                
+                // Advance automatically when reaching known song duration even if DASH container has trailing silence
+                if !self.isAdvancingTrack, self.duration > 10, seconds >= self.duration - 0.25 {
+                    self.isAdvancingTrack = true
+                    self.next()
                 }
             }
         }
@@ -246,7 +291,8 @@ final class AudioPlayerManager: ObservableObject {
     }
     
     func resume() {
-        try? AVAudioSession.sharedInstance().setActive(true)
+        configureAudioSession()
+        player?.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
         player?.play()
         isPlaying = true
         updateNowPlayingInfo()
@@ -270,6 +316,7 @@ final class AudioPlayerManager: ObservableObject {
     func next() {
         guard !queue.isEmpty else { return }
         if repeatMode == .one, currentSong != nil {
+            isAdvancingTrack = false
             seek(to: 0)
             resume()
             return
@@ -344,23 +391,27 @@ final class AudioPlayerManager: ObservableObject {
     }
     
     /// Asynchronously downloads and caches artwork for lockscreen display.
-    private func loadArtwork(from url: URL) {
-        guard let song = currentSong else { return }
-        if let cached = artworkCache[song.id] {
-            NowPlayingManager.shared.updateNowPlaying(
-                song: song,
-                currentTime: currentTime,
-                duration: duration,
-                isPlaying: isPlaying,
-                artworkImage: cached
-            )
+    private func loadArtwork(from url: URL, for songId: String) {
+        if let cached = artworkCache[songId] {
+            updateNowPlayingInfo()
+            return
+        }
+        
+        if let sharedCached = ImageCacheManager.shared.image(for: url) {
+            artworkCache[songId] = sharedCached
+            updateNowPlayingInfo()
             return
         }
         
         Task {
-            if let (data, _) = try? await URLSession.shared.data(from: url),
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 10
+            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+            
+            if let (data, _) = try? await URLSession.shared.data(for: request),
                let image = UIImage(data: data) {
-                self.artworkCache[song.id] = image
+                ImageCacheManager.shared.set(image, for: url)
+                self.artworkCache[songId] = image
                 self.updateNowPlayingInfo()
             }
         }
@@ -375,7 +426,28 @@ final class AudioPlayerManager: ObservableObject {
     
     @objc private nonisolated func handleTrackEnded() {
         Task { @MainActor in
+            guard !self.isAdvancingTrack else { return }
+            self.isAdvancingTrack = true
             self.next()
+        }
+    }
+    
+    @objc private nonisolated func handleDidEnterBackground() {
+        Task { @MainActor in
+            if self.isPlaying {
+                self.configureAudioSession()
+                self.player?.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
+                if self.player?.rate == 0 {
+                    self.player?.play()
+                }
+                self.updateNowPlayingInfo()
+            }
+        }
+    }
+    
+    @objc private nonisolated func handleWillEnterForeground() {
+        Task { @MainActor in
+            self.updateNowPlayingInfo()
         }
     }
     

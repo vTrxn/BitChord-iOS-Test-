@@ -13,45 +13,50 @@ struct SongRowView: View {
     
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 CachedAsyncImage(url: song.thumbnailURL) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
                     ZStack {
-                        Color(.secondarySystemBackground)
+                        Color(.tertiarySystemFill)
                         Image(systemName: "music.note")
+                            .font(.system(size: 18))
                             .foregroundColor(.secondary)
                     }
                 }
                 .frame(width: 48, height: 48)
+                .clipped()
                 .cornerRadius(6)
                 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(song.title)
-                        .font(.body.weight(.medium))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundColor(isCurrentSong ? .accentColor : .primary)
                         .lineLimit(1)
                     
-                    HStack(spacing: 6) {
+                    HStack(spacing: 5) {
                         if downloads.isDownloaded(songId: song.id) {
                             Image(systemName: "arrow.down.circle.fill")
                                 .font(.caption2)
                                 .foregroundColor(.green)
                         }
                         Text(song.artist)
-                            .font(.subheadline)
+                            .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
                 }
+                .layoutPriority(1)
                 
-                Spacer()
+                Spacer(minLength: 6)
                 
-                Text(song.formattedDuration)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if song.durationSeconds > 0 {
+                    Text(song.formattedDuration)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundColor(.secondary)
+                }
                 
                 Menu {
                     Button {
@@ -88,13 +93,13 @@ struct SongRowView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 16))
+                        .font(.system(size: 15))
                         .foregroundColor(.secondary)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 32, height: 44)
                         .contentShape(Rectangle())
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 3)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

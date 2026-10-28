@@ -12,15 +12,15 @@ struct FullPlayerView: View {
         GeometryReader { geo in
             let availableWidth = geo.size.width
             let availableHeight = geo.size.height
-            let isCompact = availableHeight < 720
-            let artworkSize = max(160, min(availableWidth - 72, availableHeight * 0.35, 280))
+            let isCompact = availableHeight < 700
+            let artworkSize = max(150, min(availableWidth - 56, availableHeight * 0.38, 310))
             
             ZStack {
                 Color(.systemBackground)
                     .ignoresSafeArea()
                 
                 if let song = player.currentSong {
-                    VStack(spacing: isCompact ? 14 : 20) {
+                    VStack(spacing: isCompact ? 12 : 18) {
                         // Top Bar
                         HStack {
                             Button {
@@ -52,13 +52,14 @@ struct FullPlayerView: View {
                         }
                         .padding(.horizontal, 16)
                         
-                        Spacer(minLength: 4)
+                        Spacer(minLength: 2)
                         
                         // Album Artwork
                         CachedAsyncImage(url: song.highResThumbnailURL) { image in
                             image
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
+                                .scaleEffect(1.34)
                         } placeholder: {
                             ZStack {
                                 Color(.secondarySystemBackground)
@@ -68,26 +69,29 @@ struct FullPlayerView: View {
                             }
                         }
                         .frame(width: artworkSize, height: artworkSize)
+                        .clipped()
                         .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
+                        .shadow(color: Color.black.opacity(0.14), radius: 8, x: 0, y: 4)
                         
-                        Spacer(minLength: 4)
+                        Spacer(minLength: 2)
                         
                         // Title, Artist and Favorite
-                        HStack(alignment: .center) {
+                        HStack(alignment: .center, spacing: 12) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(song.title)
                                     .font((isCompact ? Font.headline : Font.title3).weight(.bold))
                                     .foregroundColor(.primary)
-                                    .lineLimit(1)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.85)
                                 
                                 Text(song.artist)
                                     .font(isCompact ? .subheadline : .body)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
                             }
+                            .layoutPriority(1)
                             
-                            Spacer()
+                            Spacer(minLength: 8)
                             
                             Button {
                                 favorites.toggleLike(song: song)
@@ -111,7 +115,7 @@ struct FullPlayerView: View {
                         .padding(.horizontal, 24)
                         
                         // Playback Controls
-                        HStack(spacing: isCompact ? 20 : 28) {
+                        HStack(spacing: isCompact ? 18 : 26) {
                             // Shuffle
                             Button {
                                 player.toggleShuffle()
@@ -139,7 +143,7 @@ struct FullPlayerView: View {
                                 ZStack {
                                     Circle()
                                         .fill(Color.accentColor)
-                                        .frame(width: isCompact ? 54 : 64, height: isCompact ? 54 : 64)
+                                        .frame(width: isCompact ? 56 : 64, height: isCompact ? 56 : 64)
                                     
                                     if player.isLoading {
                                         ProgressView()
@@ -174,7 +178,7 @@ struct FullPlayerView: View {
                             }
                         }
                         
-                        Spacer(minLength: 4)
+                        Spacer(minLength: 2)
                         
                         // Bottom lyrics button
                         Button {
@@ -192,10 +196,8 @@ struct FullPlayerView: View {
                             .cornerRadius(20)
                             .frame(minHeight: 44)
                         }
-                        .padding(.bottom, 8)
                     }
-                    .padding(.top, max(geo.safeAreaInsets.top, 8))
-                    .padding(.bottom, max(geo.safeAreaInsets.bottom, 8))
+                    .padding(.vertical, 8)
                 } else {
                     EmptyStateView(
                         iconName: "music.note",

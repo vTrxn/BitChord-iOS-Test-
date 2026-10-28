@@ -24,7 +24,7 @@ enum NetworkError: LocalizedError {
     }
 }
 
-/// Handles querying track metadata, trending lists, and catalog searches.
+/// Handles querying track metadata, trending lists, search suggestions, and catalog searches.
 /// Automatically falls back across multiple instances when an endpoint fails or times out.
 final class MusicSearchService {
     static let shared = MusicSearchService()
@@ -71,6 +71,38 @@ final class MusicSearchService {
         throw NetworkError.noAvailableInstance
     }
     
+    /// Fetches real-time autocomplete search suggestions for the user's partial query.
+    func fetchSearchSuggestions(query: String) async -> [String] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        
+        let primaryInstance = await MainActor.run { InstanceManager.shared.activeInstance }
+        let instances = [primaryInstance] + AppConstants.defaultInstances.filter { $0 != primaryInstance }
+        
+        for instance in instances {
+            guard var components = URLComponents(string: "\(instance)/api/v1/search/suggestions") else { continue }
+            components.queryItems = [URLQueryItem(name: "q", value: trimmed)]
+            guard let url = components.url else { continue }
+            
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 4
+            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+            
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode),
+                      let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let suggestions = json["suggestions"] as? [String] else {
+                    continue
+                }
+                return Array(suggestions.prefix(6))
+            } catch {
+                continue
+            }
+        }
+        return []
+    }
+    
     /// Fetches currently popular tracks from the server or falls back to a curated chart query.
     func fetchTrending() async throws -> [Song] {
         let primaryInstance = await MainActor.run { InstanceManager.shared.activeInstance }
@@ -81,6 +113,7 @@ final class MusicSearchService {
             
             var request = URLRequest(url: url)
             request.timeoutInterval = 8
+            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
             
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
@@ -97,7 +130,7 @@ final class MusicSearchService {
             }
         }
         
-        return try await searchSongs(query: "Top Global Hits 2024")
+        return try await searchSongs(query: "Top Global Hits")
     }
     
     /// Transforms raw Invidious JSON search response into typed Song models.
@@ -109,27 +142,24 @@ final class MusicSearchService {
         var results: [Song] = []
         for item in jsonArray {
             guard let videoId = item["videoId"] as? String,
-                  let title = item["title"] as? String else {
+                  !videoId.isEmpty,
+                  let rawTitle = item["title"] as? String else {
                 continue
             }
             
-            let author = (item["author"] as? String) ?? "Unknown Artist"
+            let rawAuthor = (item["author"] as? String) ?? "Unknown Artist"
             let lengthSeconds = (item["lengthSeconds"] as? Int) ?? 0
             
-            var thumbURL: URL? = nil
-            if let thumbnails = item["videoThumbnails"] as? [[String: Any]] {
-                if let last = thumbnails.last, let urlStr = last["url"] as? String {
-                    thumbURL = URL(string: urlStr)
-                }
-            }
-            if thumbURL == nil {
-                thumbURL = URL(string: "https://i.ytimg.com/vi/\(videoId)/hqdefault.jpg")
-            }
+            // Always use direct HTTPS YouTube image CDN for reliable, fast thumbnail loading
+            let thumbURL = URL(string: "https://i.ytimg.com/vi/\(videoId)/mqdefault.jpg")
+            
+            let cleanedArtist = cleanArtist(rawAuthor)
+            let cleanedTitle = cleanTitle(rawTitle, artist: cleanedArtist)
             
             let song = Song(
                 id: videoId,
-                title: cleanTitle(title),
-                artist: author,
+                title: cleanedTitle,
+                artist: cleanedArtist,
                 durationSeconds: lengthSeconds,
                 thumbnailURL: thumbURL,
                 albumName: nil
@@ -140,17 +170,36 @@ final class MusicSearchService {
         return results
     }
     
-    /// Removes boilerplate metadata tags like "(Official Video)" or "[Audio]" from track titles.
-    private func cleanTitle(_ title: String) -> String {
+    /// Strips channel suffixes like "- Topic" or "VEVO" from artist names.
+    private func cleanArtist(_ author: String) -> String {
+        var cleaned = author
+            .replacingOccurrences(of: " - Topic", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "VEVO", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty {
+            cleaned = author
+        }
+        return cleaned
+    }
+    
+    /// Removes boilerplate metadata tags and redundant leading artist prefixes from track titles.
+    private func cleanTitle(_ title: String, artist: String) -> String {
         var cleaned = title
         let removablePatterns = [
-            #"\s*\(Official (Music )?Video\)"#,
-            #"\s*\[Official (Music )?Video\]"#,
+            #"\s*\(Official (Music |HD |4K |Lyric |Audio )?Video\)"#,
+            #"\s*\[Official (Music |HD |4K |Lyric |Audio )?Video\]"#,
             #"\s*\(Official Audio\)"#,
             #"\s*\[Official Audio\]"#,
             #"\s*\(Audio\)"#,
+            #"\s*\[Audio\]"#,
             #"\s*\(Lyric Video\)"#,
-            #"\s*\[Lyric Video\]"#
+            #"\s*\[Lyric Video\]"#,
+            #"\s*\(Lyrics\)"#,
+            #"\s*\[Lyrics\]"#,
+            #"\s*\(Visualizer\)"#,
+            #"\s*\[Visualizer\]"#,
+            #"\s*\(Video Oficial\)"#,
+            #"\s*\[Video Oficial\]"#
         ]
         
         for pattern in removablePatterns {
@@ -160,6 +209,17 @@ final class MusicSearchService {
             }
         }
         
-        return cleaned.trimmingCharacters(in: .whitespaces)
+        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Strip redundant leading "Artist - " prefix when it matches the artist name
+        let prefix = "\(artist) - "
+        if cleaned.lowercased().hasPrefix(prefix.lowercased()) {
+            let dropCount = prefix.count
+            if cleaned.count > dropCount {
+                cleaned = String(cleaned.dropFirst(dropCount)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        
+        return cleaned.isEmpty ? title : cleaned
     }
 }

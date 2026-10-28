@@ -18,10 +18,10 @@ struct Song: Identifiable, Codable, Equatable, Hashable {
     /// Remote URL pointing to album or video thumbnail art.
     let thumbnailURL: URL?
     
-    /// Returns a higher resolution thumbnail if the original is hosted on Google or YouTube servers.
+    /// Returns a higher resolution thumbnail from YouTube's global image CDN.
     var highResThumbnailURL: URL? {
-        if let original = thumbnailURL?.absoluteString, original.contains("youtube.com") || original.contains("ggpht.com") {
-            return URL(string: "https://i.ytimg.com/vi/\(id)/hqdefault.jpg")
+        if !id.isEmpty, let hq = URL(string: "https://i.ytimg.com/vi/\(id)/hqdefault.jpg") {
+            return hq
         }
         return thumbnailURL
     }
@@ -45,6 +45,10 @@ struct Song: Identifiable, Codable, Equatable, Hashable {
         return String(format: "%d:%02d", minutes, seconds)
     }
     
+    enum CodingKeys: String, CodingKey {
+        case id, title, artist, durationSeconds, thumbnailURL, albumName, streamURL, isDownloaded, localFilePath
+    }
+    
     init(
         id: String,
         title: String,
@@ -60,11 +64,35 @@ struct Song: Identifiable, Codable, Equatable, Hashable {
         self.title = title
         self.artist = artist
         self.durationSeconds = durationSeconds
-        self.thumbnailURL = thumbnailURL
+        self.thumbnailURL = Self.resolveThumbnail(url: thumbnailURL, videoId: id)
         self.albumName = albumName
         self.streamURL = streamURL
         self.isDownloaded = isDownloaded
         self.localFilePath = localFilePath
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedId = try container.decode(String.self, forKey: .id)
+        self.id = decodedId
+        self.title = try container.decode(String.self, forKey: .title)
+        self.artist = try container.decode(String.self, forKey: .artist)
+        self.durationSeconds = (try? container.decode(Int.self, forKey: .durationSeconds)) ?? 0
+        let rawThumb = try? container.decodeIfPresent(URL.self, forKey: .thumbnailURL)
+        self.thumbnailURL = Self.resolveThumbnail(url: rawThumb, videoId: decodedId)
+        self.albumName = try? container.decodeIfPresent(String.self, forKey: .albumName)
+        self.streamURL = try? container.decodeIfPresent(URL.self, forKey: .streamURL)
+        self.isDownloaded = (try? container.decode(Bool.self, forKey: .isDownloaded)) ?? false
+        self.localFilePath = try? container.decodeIfPresent(String.self, forKey: .localFilePath)
+    }
+    
+    /// Guarantees a valid HTTPS thumbnail URL even if the API or cached storage provided a relative path.
+    private static func resolveThumbnail(url: URL?, videoId: String) -> URL? {
+        if let valid = url, let scheme = valid.scheme, scheme.hasPrefix("http"), valid.host != nil {
+            return valid
+        }
+        guard !videoId.isEmpty else { return nil }
+        return URL(string: "https://i.ytimg.com/vi/\(videoId)/mqdefault.jpg")
     }
     
     static func == (lhs: Song, rhs: Song) -> Bool {

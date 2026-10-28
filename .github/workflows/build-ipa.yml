@@ -78,6 +78,8 @@ jobs:
           
           echo "Found app bundle at: $APP_PATH"
           cp -R "$APP_PATH" build/Payload/
+          /usr/libexec/PlistBuddy -c "Print :UIBackgroundModes" build/Payload/BitChord.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :UILaunchScreen" build/Payload/BitChord.app/Info.plist
           cd build && zip -r -9 BitChord.ipa Payload
           echo "IPA packaged successfully at build/BitChord.ipa"
 

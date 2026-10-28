@@ -91,6 +91,8 @@ final class NowPlayingManager {
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
         }
         
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        let center = MPNowPlayingInfoCenter.default()
+        center.nowPlayingInfo = info
+        center.playbackState = isPlaying ? .playing : .paused
     }
 }
