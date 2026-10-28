@@ -213,7 +213,8 @@ struct QueueSheetView: View {
         NavigationStack {
             List {
                 Section("Up Next (\(player.queue.count) tracks)") {
-                    ForEach(Array(player.queue.enumerated()), id: \.element.id) { index, song in
+                    ForEach(Array(player.queue.indices), id: \.self) { index in
+                        let song = player.queue[index]
                         SongRowView(
                             song: song,
                             isCurrentSong: index == player.currentIndex,

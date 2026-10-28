@@ -29,7 +29,8 @@ struct LyricsSheetView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
-                            ForEach(Array(player.lyrics.lines.enumerated()), id: \.element.id) { index, line in
+                            ForEach(Array(player.lyrics.lines.indices), id: \.self) { index in
+                                let line = player.lyrics.lines[index]
                                 let isActive = index == player.activeLyricIndex
                                 
                                 Button {
