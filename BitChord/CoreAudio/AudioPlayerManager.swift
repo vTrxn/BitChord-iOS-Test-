@@ -1,0 +1,370 @@
+import Foundation
+import AVFoundation
+import MediaPlayer
+import UIKit
+
+enum RepeatMode: String, CaseIterable {
+    case off = "Off"
+    case all = "All"
+    case one = "One"
+    
+    var iconName: String {
+        switch self {
+        case .off: return "repeat"
+        case .all: return "repeat.1"
+        case .one: return "repeat.1.circle.fill"
+        }
+    }
+}
+
+final class AudioPlayerManager: ObservableObject {
+    static let shared = AudioPlayerManager()
+    
+    @Published var currentSong: Song?
+    @Published var isPlaying: Bool = false
+    @Published var isLoading: Bool = false
+    @Published var currentTime: TimeInterval = 0
+    @Published var duration: TimeInterval = 1
+    @Published var queue: [Song] = []
+    @Published var currentIndex: Int = 0
+    @Published var isShuffleEnabled: Bool = false
+    @Published var repeatMode: RepeatMode = .off
+    @Published var lyrics: ParsedLyrics = .empty
+    @Published var activeLyricIndex: Int = 0
+    @Published var errorMessage: String?
+    
+    private var player: AVPlayer?
+    private var timeObserverToken: Any?
+    private var artworkCache: [String: UIImage] = [:]
+    private var originalQueue: [Song] = []
+    
+    private init() {
+        configureAudioSession()
+        setupNotifications()
+        setupRemoteCommands()
+    }
+    
+    private func configureAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, policy: .longFormAudio, options: [])
+            try session.setActive(true)
+        } catch {
+            print("Failed to configure AVAudioSession: \(error)")
+        }
+    }
+    
+    private func setupNotifications() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTrackEnded),
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification,
+            object: nil
+        )
+    }
+    
+    private func setupRemoteCommands() {
+        NowPlayingManager.shared.setupRemoteCommands(
+            onPlay: { [weak self] in self?.resume() },
+            onPause: { [weak self] in self?.pause() },
+            onTogglePlayPause: { [weak self] in self?.togglePlayPause() },
+            onNext: { [weak self] in self?.next() },
+            onPrevious: { [weak self] in self?.previous() },
+            onSeek: { [weak self] time in self?.seek(to: time) }
+        )
+    }
+    
+    func playSong(_ song: Song, queue: [Song] = []) {
+        self.currentSong = song
+        self.errorMessage = nil
+        self.isLoading = true
+        self.currentTime = 0
+        self.duration = song.durationSeconds > 0 ? Double(song.durationSeconds) : 1
+        self.lyrics = .empty
+        self.activeLyricIndex = 0
+        
+        FavoritesManager.shared.recordRecent(song: song)
+        
+        if !queue.isEmpty {
+            self.originalQueue = queue
+            self.queue = isShuffleEnabled ? queue.shuffled() : queue
+            if let idx = self.queue.firstIndex(where: { $0.id == song.id }) {
+                self.currentIndex = idx
+            }
+        } else if self.queue.isEmpty {
+            self.queue = [song]
+            self.originalQueue = [song]
+            self.currentIndex = 0
+        }
+        
+        Task {
+            await startPlayback(for: song)
+            await fetchLyrics(for: song)
+        }
+    }
+    
+    private func startPlayback(for song: Song) async {
+        do {
+            let playbackURL: URL
+            
+            // Check if downloaded locally
+            if let localPath = song.localFilePath, FileManager.default.fileExists(atPath: localPath) {
+                playbackURL = URL(fileURLWithPath: localPath)
+            } else if let streamURL = song.streamURL {
+                playbackURL = streamURL
+            } else {
+                playbackURL = try await AudioStreamService.shared.resolveStreamURL(videoId: song.id)
+            }
+            
+            await MainActor.run {
+                self.setupPlayer(with: playbackURL)
+                self.isLoading = false
+                self.isPlaying = true
+                self.updateNowPlayingInfo()
+            }
+            
+            // Fetch high-res artwork for lockscreen in background
+            if let thumbURL = song.highResThumbnailURL {
+                loadArtwork(from: thumbURL)
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoading = false
+                self.isPlaying = false
+                self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+    
+    private func setupPlayer(with url: URL) {
+        removeTimeObserver()
+        
+        let playerItem = AVPlayerItem(url: url)
+        if player == nil {
+            player = AVPlayer(playerItem: playerItem)
+            player?.automaticallyWaitsToMinimizeStalling = true
+        } else {
+            player?.replaceCurrentItem(with: playerItem)
+        }
+        
+        player?.play()
+        
+        let interval = CMTime(seconds: 0.25, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        timeObserverToken = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            guard let self = self else { return }
+            let seconds = CMTimeGetSeconds(time)
+            if !seconds.isNaN {
+                self.currentTime = seconds
+                self.updateActiveLyricIndex(at: seconds)
+            }
+            if let currentItem = self.player?.currentItem {
+                let itemDuration = CMTimeGetSeconds(currentItem.duration)
+                if !itemDuration.isNaN, itemDuration > 0 {
+                    self.duration = itemDuration
+                }
+            }
+        }
+    }
+    
+    private func fetchLyrics(for song: Song) async {
+        let fetched = await LyricsService.shared.fetchLyrics(for: song)
+        await MainActor.run {
+            self.lyrics = fetched
+        }
+    }
+    
+    private func updateActiveLyricIndex(at currentTime: TimeInterval) {
+        guard lyrics.isSynced, !lyrics.lines.isEmpty else { return }
+        if let idx = lyrics.lines.lastIndex(where: { $0.timestamp <= currentTime }) {
+            if activeLyricIndex != idx {
+                activeLyricIndex = idx
+            }
+        }
+    }
+    
+    func togglePlayPause() {
+        if isPlaying {
+            pause()
+        } else {
+            resume()
+        }
+    }
+    
+    func resume() {
+        player?.play()
+        isPlaying = true
+        updateNowPlayingInfo()
+    }
+    
+    func pause() {
+        player?.pause()
+        isPlaying = false
+        updateNowPlayingInfo()
+    }
+    
+    func seek(to seconds: TimeInterval) {
+        let target = CMTime(seconds: seconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        player?.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+        currentTime = seconds
+        updateNowPlayingInfo()
+    }
+    
+    func next() {
+        guard !queue.isEmpty else { return }
+        if repeatMode == .one, let song = currentSong {
+            seek(to: 0)
+            resume()
+            return
+        }
+        
+        let nextIndex = currentIndex + 1
+        if nextIndex < queue.count {
+            currentIndex = nextIndex
+            playSong(queue[nextIndex], queue: queue)
+        } else if repeatMode == .all {
+            currentIndex = 0
+            playSong(queue[0], queue: queue)
+        } else {
+            pause()
+        }
+    }
+    
+    func previous() {
+        // If current song is already played > 3 seconds, restart it
+        if currentTime > 3 {
+            seek(to: 0)
+            return
+        }
+        
+        let prevIndex = currentIndex - 1
+        if prevIndex >= 0 {
+            currentIndex = prevIndex
+            playSong(queue[prevIndex], queue: queue)
+        } else if let song = currentSong {
+            seek(to: 0)
+        }
+    }
+    
+    func toggleShuffle() {
+        isShuffleEnabled.toggle()
+        guard let current = currentSong else { return }
+        
+        if isShuffleEnabled {
+            var shuffled = originalQueue.filter { $0.id != current.id }.shuffled()
+            shuffled.insert(current, at: 0)
+            queue = shuffled
+            currentIndex = 0
+        } else {
+            queue = originalQueue
+            if let idx = queue.firstIndex(where: { $0.id == current.id }) {
+                currentIndex = idx
+            }
+        }
+    }
+    
+    func toggleRepeat() {
+        switch repeatMode {
+        case .off: repeatMode = .all
+        case .all: repeatMode = .one
+        case .one: repeatMode = .off
+        }
+    }
+    
+    private func updateNowPlayingInfo() {
+        guard let song = currentSong else { return }
+        let artwork = artworkCache[song.id]
+        NowPlayingManager.shared.updateNowPlaying(
+            song: song,
+            currentTime: currentTime,
+            duration: duration,
+            isPlaying: isPlaying,
+            artworkImage: artwork
+        )
+    }
+    
+    private func loadArtwork(from url: URL) {
+        guard let song = currentSong else { return }
+        if let cached = artworkCache[song.id] {
+            NowPlayingManager.shared.updateNowPlaying(
+                song: song,
+                currentTime: currentTime,
+                duration: duration,
+                isPlaying: isPlaying,
+                artworkImage: cached
+            )
+            return
+        }
+        
+        Task {
+            if let (data, _) = try? await URLSession.shared.data(from: url),
+               let image = UIImage(data: data) {
+                await MainActor.run {
+                    self.artworkCache[song.id] = image
+                    self.updateNowPlayingInfo()
+                }
+            }
+        }
+    }
+    
+    private func removeTimeObserver() {
+        if let token = timeObserverToken {
+            player?.removeTimeObserver(token)
+            timeObserverToken = nil
+        }
+    }
+    
+    @objc private func handleTrackEnded() {
+        next()
+    }
+    
+    @objc private func handleAudioInterruption(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+        
+        switch type {
+        case .began:
+            pause()
+        case .ended:
+            if let optionsValue = info[AVAudioSessionInterruptionOptionKey] as? UInt {
+                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+                if options.contains(.shouldResume) {
+                    resume()
+                }
+            }
+        @unknown default:
+            break
+        }
+    }
+    
+    @objc private func handleRouteChange(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let reasonValue = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
+            return
+        }
+        // Pause audio if headphones unplugged
+        if reason == .oldDeviceUnavailable {
+            pause()
+        }
+    }
+    
+    deinit {
+        removeTimeObserver()
+        NotificationCenter.default.removeObserver(self)
+    }
+}

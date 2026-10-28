@@ -1,0 +1,79 @@
+import Foundation
+
+final class AudioStreamService {
+    static let shared = AudioStreamService()
+    
+    private init() {}
+    
+    func resolveStreamURL(videoId: String, quality: StreamQuality = .high) async throws -> URL {
+        let instances = [InstanceManager.shared.activeInstance] + AppConstants.defaultInstances.filter { $0 != InstanceManager.shared.activeInstance }
+        
+        for instance in instances {
+            guard let url = URL(string: "\(instance)/api/v1/videos/\(videoId)") else { continue }
+            
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 7
+            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+            
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    continue
+                }
+                
+                if let streamURL = extractAudioURL(from: data, targetBitrate: quality.targetBitrate) {
+                    return streamURL
+                }
+            } catch {
+                continue
+            }
+        }
+        
+        throw NetworkError.noAvailableInstance
+    }
+    
+    private func extractAudioURL(from data: Data, targetBitrate: Int) -> URL? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        
+        // Check adaptiveFormats for audio/mp4 (best compatibility with iOS AVPlayer)
+        if let adaptiveFormats = json["adaptiveFormats"] as? [[String: Any]] {
+            var audioStreams: [(url: URL, bitrate: Int, isM4A: Bool)] = []
+            
+            for format in adaptiveFormats {
+                guard let type = format["type"] as? String,
+                      type.contains("audio/"),
+                      let urlStr = format["url"] as? String,
+                      let url = URL(string: urlStr) else {
+                    continue
+                }
+                
+                let bitrate = (format["bitrate"] as? Int) ?? 0
+                let isM4A = type.contains("audio/mp4")
+                audioStreams.append((url: url, bitrate: bitrate, isM4A: isM4A))
+            }
+            
+            // Prefer m4a formats because AVPlayer natively decodes AAC with zero overhead
+            let m4aStreams = audioStreams.filter { $0.isM4A }
+            let pool = !m4aStreams.isEmpty ? m4aStreams : audioStreams
+            
+            if !pool.isEmpty {
+                // Find stream closest to user's desired bitrate
+                let sorted = pool.sorted { abs($0.bitrate - targetBitrate) < abs($1.bitrate - targetBitrate) }
+                return sorted.first?.url
+            }
+        }
+        
+        // Fallback to formatStreams
+        if let formatStreams = json["formatStreams"] as? [[String: Any]] {
+            for format in formatStreams {
+                if let urlStr = format["url"] as? String, let url = URL(string: urlStr) {
+                    return url
+                }
+            }
+        }
+        
+        return nil
+    }
+}

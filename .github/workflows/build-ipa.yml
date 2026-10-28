@@ -1,0 +1,49 @@
+name: Build BitChord iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Unsigned IPA
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        run: xcodegen generate
+
+      - name: Build Archive
+        run: |
+          xcodebuild archive \
+            -project BitChord.xcodeproj \
+            -scheme BitChord \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/BitChord.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R build/BitChord.xcarchive/Products/Applications/BitChord.app build/Payload/
+          cd build && zip -r -9 BitChord.ipa Payload
+          echo "IPA created successfully at build/BitChord.ipa"
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BitChord-iOS-IPA
+          path: build/BitChord.ipa
+          retention-days: 14
