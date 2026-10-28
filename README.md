@@ -6,7 +6,7 @@ Built natively in **Swift and SwiftUI**, it provides ad-free music playback, bac
 
 Repository: [https://github.com/vTrxn/BitChord-iOS-Test-](https://github.com/vTrxn/BitChord-iOS-Test-)
 CI/CD Pipeline: [![Build BitChord iOS IPA](https://github.com/vTrxn/BitChord-iOS-Test-/actions/workflows/build-ipa.yml/badge.svg)](https://github.com/vTrxn/BitChord-iOS-Test-/actions/workflows/build-ipa.yml)
-Latest Successful IPA Build: [GitHub Actions Run 40616912543](https://github.com/vTrxn/BitChord-iOS-Test-/actions/runs/40616912543)
+Latest Successful IPA Build: [GitHub Actions Run 40627457161](https://github.com/vTrxn/BitChord-iOS-Test-/actions/runs/40627457161)
 
 ---
 
