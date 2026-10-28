@@ -413,7 +413,7 @@ final class AudioPlayerManager: ObservableObject {
         }
     }
     
-    nonisolated deinit {
+    deinit {
         NotificationCenter.default.removeObserver(self)
     }
 }
